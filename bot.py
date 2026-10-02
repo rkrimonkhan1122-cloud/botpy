@@ -568,7 +568,7 @@ TOKEN = "8918437621:AAH6yLvY_9YcqhH-XCdKH-PRURMARL86Gmw"
 join_channel_id = -1004420737557       # @whophits channel
 join_chat_id    = -1004221682658       # @whopexx group
 
-CHANNEL_LINK = "https://t.me/whopexmain"
+CHANNEL_LINK = "https://t.me/+cWbgBpI6t8o2MDU1"
 GROUP_LINK   = "https://t.me/+DdYXHthf6i9kYWNl"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -7077,7 +7077,7 @@ def _hitw_price_disp(price) -> str:
 
 def _format_hitw_approved(cc, result, bin_info, checkout_url, mail_used,
                           user_id, user_name, user_uname):
-    """The 'Successfully hitted' message — checkout url, mail, card, amount,
+    """The 'Hitted Successfully' message — checkout url, mail, card, amount,
     time and BIN details."""
     price = _hitw_price_disp(result.get("price", "-"))
     elapsed = float(result.get("elapsed", 0.0) or 0.0)
@@ -7085,11 +7085,11 @@ def _format_hitw_approved(cc, result, bin_info, checkout_url, mail_used,
     safe_url = _html.escape(checkout_url or "-")
     b = bin_info if isinstance(bin_info, dict) and bin_info else _HITW_EMPTY_BIN
     return (
-        f"{wpe('approved')} {_to_bi('SUCCESSFULLY HITTED')} {wpe('approved')}\n\n"
+        f"{wpe('approved')} {_to_bi('Hitted Successfully')} {wpe('approved')}\n\n"
         f"{wpe('card')} {_to_bi('Card:')} <code>{cc}</code>\n"
         f"{wpe('link')} {_to_bi('Checkout Url:')} {_to_bi(safe_url)}\n"
         f"{wpe('sparkle')} {_to_bi('Mail:')} <code>{_html.escape(str(mail_used or '-'))}</code>\n"
-        f"{wpe('amount')} {_to_bi('Amount:')} {_to_bi(price)}\n"
+        f"{wpe('amount')} {_to_bi('Price:')} {_to_bi(price)} {_to_bi('Charged')}\n"
         f"{wpe('time')} {_to_bi('Time:')} {_to_bi(f'{elapsed:.2f}s')}\n"
         f"{wpe('gem')} {_to_bi('Response:')} {_to_bi(_html.escape(resp_msg))}\n\n"
         f"{wpe('triple_ring')} {_to_bi('BIN Info:')}\n"
@@ -7145,7 +7145,7 @@ def _hitw_result_line(cat: str, cc: str, result: dict) -> str:
     price = _hitw_price_disp(result.get("price", "-"))
     resp = _html.escape(str(result.get("response", "-"))[:70] or "-")
     if cat == "APPROVED":
-        icon, label = wpe('approved'), "APPROVED"
+        icon, label = wpe('approved'), "Hitted Successfully"
     elif cat == "INSUFFICIENT":
         icon, label = wpe('insufficient'), "INSUFFICIENT"
     elif cat == "3DS":
@@ -7210,6 +7210,7 @@ async def _hitw_side_effects(cc, result, category, bin_info, checkout_url,
             user_id=user_id,
             user_name=user_name,
             user_uname=user_uname,
+            gate_name="Whop Hitter",
         ))
 
     if category == "APPROVED":
@@ -7442,8 +7443,22 @@ async def _hitw_run_multi(all_ccs, checkout_url, personal_mail, proxy_pool,
     n_workers = max(1, min(total, _HITW_CONCURRENCY))
     log.info("[/hitw] %d cards for user %s — %d parallel workers (target: %s)",
              total, user_id, n_workers, checkout_url)
+
+    # v36 — Periodic box updater: updates every 10 seconds even when
+    # no card has finished (so the user sees live progress during slow cards)
+    async def _periodic_box_updater():
+        while not _WHOP_BULK_STOP_FLAGS.get(stop_key, False):
+            await asyncio.sleep(10)
+            try:
+                if counters["processed"] < total:
+                    await _send_box_update()
+            except Exception:
+                pass
+
+    box_task = asyncio.create_task(_periodic_box_updater())
     workers = [asyncio.create_task(_worker()) for _ in range(n_workers)]
     await asyncio.gather(*workers, return_exceptions=True)
+    box_task.cancel()
 
     # ── Final box ──────────────────────────────────────────────────────
     was_stopped = _WHOP_BULK_STOP_FLAGS.get(stop_key, False)
@@ -24856,6 +24871,180 @@ async def cmd_banned_list(message: types.Message):
 
     lines.append(f"\n{pe(E['warn'])} {bold('Use /unban &lt;id&gt; to unban.')}")
     await message.reply("\n".join(lines))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  /checksqsites — Square Site Validator (reply to .txt with Square URLs)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_CHECKSQ_TEST_CARD = "4242424242424242|12|34|123"
+
+@router.message(Command("checksqsites"))
+async def cmd_checksqsites(message: types.Message):
+    """Reply to a .txt file containing Square checkout URLs with /checksqsites.
+
+    Tests each site with a test card — if the response is DECLINED (not
+    SESSION_EXPIRED / ERROR), the site is VALID and saved to valid_sites.txt.
+    """
+    user_id = message.from_user.id
+    if auth.is_banned(user_id):
+        return
+    joined = await check_user_joined(user_id)
+    if not joined:
+        await message.reply(JOIN_MSG, reply_markup=join_keyboard())
+        return
+
+    doc = message.document or (message.reply_to_message.document
+                               if message.reply_to_message else None)
+    if not doc:
+        await message.reply(
+            f"{wpe('bolt_yellow')} {_to_bi('Square Site Validator')}\n"
+            f"{_ST_SEP}\n"
+            f"{wpe('warn')} {_to_bi('Reply to a .txt file with Square checkout URLs and use /checksqsites')}\n\n"
+            f"{wpe('arrow_right')} {_to_bi('Format: https://checkout.square.site/merchant/ML.../checkout/XX...')}\n"
+            f"{_to_bi('gate')} : {wpe('fire')} {_to_bi('Square Validator')}"
+        )
+        return
+
+    init_msg = await message.reply(
+        f"{wpe('arc_reactor')} {_to_bi('Downloading file...')} {wpe('processing')}"
+    )
+    try:
+        file = await bot.download(doc.file_id)
+        raw = file.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        await safe_edit(init_msg, f"{wpe('red_warn')} {_to_bi('Download failed:')} {str(e)[:100]}")
+        return
+
+    sites = []
+    for line in raw.strip().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "checkout.square.site" in line:
+            sites.append(line)
+
+    if not sites:
+        await safe_edit(init_msg, f"{wpe('red_warn')} {_to_bi('No Square checkout URLs found in file!')}")
+        return
+
+    total = len(sites)
+    await safe_edit(init_msg,
+        f"{wpe('fire')} {_to_bi('Square Site Validator')}\n\n"
+        f"{wpe('triple_ring')} {_to_bi('Total sites:')} {_to_bi(str(total))}\n"
+        f"{wpe('arc_reactor')} {_to_bi('Checking with test card...')} {wpe('processing')}\n\n"
+        f"{_to_bi('gate')} : {wpe('fire')} {_to_bi('Square Validator')}"
+    )
+
+    proxy_str = None
+    try:
+        proxy_pool = _get_proxy_pool_for_user(user_id) or []
+        if proxy_pool:
+            proxy_str = proxy_pool[0]
+    except Exception:
+        proxy_pool = []
+
+    try:
+        from sqcharge import _load_square_apis, _call_sqapi
+        sq_apis = _load_square_apis()
+    except Exception as e:
+        await safe_edit(init_msg, f"{wpe('red_warn')} {_to_bi('sqcharge.py not available:')} {str(e)[:100]}")
+        return
+
+    if not sq_apis:
+        await safe_edit(init_msg, f"{wpe('red_warn')} {_to_bi('No Square APIs configured (sqapis.txt)!')}")
+        return
+
+    valid_sites = []
+    invalid_sites = []
+    checked = 0
+    start = time.time()
+
+    for i, site_url in enumerate(sites):
+        checked = i + 1
+        api = sq_apis[i % len(sq_apis)]
+        try:
+            result = await _call_sqapi(api, site_url, _CHECKSQ_TEST_CARD,
+                                       proxy_str or "", 100, 30.0)
+        except Exception:
+            result = None
+
+        if result and isinstance(result, dict):
+            status = str(result.get("status", "")).upper()
+            status_group = str(result.get("status_group", "")).upper()
+            # v36 FIX: Check BOTH status AND status_group — the Square API
+            # returns "GENERIC_DECLINE" as status but "DECLINED" as
+            # status_group. Also check error_code for decline patterns.
+            error_code = str(result.get("error_code", "")).upper()
+            is_valid = (
+                status in ("DECLINED", "APPROVED", "INSUFFICIENT", "3DS", "CAPTCHA")
+                or status_group in ("DECLINED", "APPROVED", "INSUFFICIENT", "3DS")
+                or "DECLINE" in status
+                or "DECLINE" in error_code
+                or "APPROVED" in status
+                or "INSUFFICIENT" in status
+                or "3DS" in status
+            )
+            if is_valid:
+                valid_sites.append(site_url)
+                verdict = "VALID"
+            elif "EXPIRED" in status or "SESSION" in status or "EXPIRED" in status_group:
+                invalid_sites.append((site_url, "Session expired"))
+                verdict = "Expired"
+            elif "ERROR" in status and "DECLINE" not in status and "DECLINE" not in error_code:
+                invalid_sites.append((site_url, status or "Error"))
+                verdict = status[:30] if status else "Error"
+            else:
+                invalid_sites.append((site_url, status or "Unknown"))
+                verdict = status[:30] if status else "Unknown"
+        else:
+            invalid_sites.append((site_url, "No response"))
+            verdict = "No response"
+
+        if checked % 3 == 0 or checked == total:
+            elapsed = time.time() - start
+            try:
+                await safe_edit(init_msg,
+                    f"{wpe('fire')} {_to_bi('Square Site Validator')}\n\n"
+                    f"{wpe('triple_ring')} {_to_bi('Total:')} {_to_bi(str(total))}\n"
+                    f"{wpe('check')} {_to_bi('Checked:')} {_to_bi(str(checked))}\n"
+                    f"{wpe('approved')} {_to_bi('Valid:')} {_to_bi(str(len(valid_sites)))}\n"
+                    f"{wpe('skull')} {_to_bi('Invalid:')} {_to_bi(str(len(invalid_sites)))}\n"
+                    f"{wpe('time')} {_to_bi('Time:')} {_to_bi(f'{elapsed:.1f}s')}\n\n"
+                    f"{wpe('arc_reactor')} {_to_bi('Last:')} {_to_bi(verdict)}\n\n"
+                    f"{_to_bi('gate')} : {wpe('fire')} {_to_bi('Square Validator')}"
+                )
+            except Exception:
+                pass
+
+    elapsed = time.time() - start
+    valid_count = len(valid_sites)
+    invalid_count = len(invalid_sites)
+
+    summary = (
+        f"{wpe('check')} {_to_bi('Square Site Validator — Complete')}\n\n"
+        f"{'=' * 30}\n"
+        f"{wpe('triple_ring')} {_to_bi('Total:')} {_to_bi(str(total))}\n"
+        f"{wpe('approved')} {_to_bi('Valid:')} {_to_bi(str(valid_count))}\n"
+        f"{wpe('skull')} {_to_bi('Invalid:')} {_to_bi(str(invalid_count))}\n"
+        f"{'=' * 30}\n"
+        f"{wpe('time')} {_to_bi('Duration:')} {_to_bi(f'{elapsed:.1f}s')}\n"
+        f"{_to_bi('gate')} : {wpe('fire')} {_to_bi('Square Validator')}"
+    )
+    await safe_edit(init_msg, summary)
+
+    if valid_sites:
+        txt_content = "\n".join(valid_sites)
+        try:
+            await message.reply_document(
+                document=types.BufferedInputFile(
+                    txt_content.encode("utf-8"),
+                    filename="valid_sites.txt"
+                ),
+                caption=f"{wpe('approved')} {_to_bi('Valid Square Sites')} — {_to_bi(str(valid_count))} {_to_bi('sites')}"
+            )
+        except Exception as e:
+            await message.reply(f"{wpe('warn')} {_to_bi('Could not send file:')} {str(e)[:100]}\n\n```\n{txt_content[:3000]}```")
+    else:
+        await message.reply(f"{wpe('red_warn')} {_to_bi('No valid sites found!')}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
